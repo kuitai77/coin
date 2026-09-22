@@ -31,6 +31,7 @@
   },
   "extra_entry_checks": [],
   "jev": {
+    "provider": "vercel",
     "model": "jev-1.13.0",
     "min_confidence": 0.70,
     "minimum_choice_probability": 0.80,

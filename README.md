@@ -66,14 +66,18 @@ python app.py inspect --strategy trend
 
 ## 4. 실제 Jev 판단 연결
 
-TypeSafe 계정에서 발급받은 키를 **내 PC의 환경변수**로 설정합니다. GitHub나 채팅에 키를 올리지 마세요.
+기본 연결은 **Vercel AI Gateway → Jev**입니다. Vercel에서 발급받은 새 키를 **내 PC의 환경변수**로 설정합니다. GitHub나 채팅에 키를 올리지 마세요.
 
 ```powershell
-$env:TYPESAFE_API_KEY="여기에_본인_PC에서만_입력"
+$env:AI_GATEWAY_API_KEY="여기에_본인_PC에서만_입력"
 python app.py inspect --strategy trend --jev
 ```
 
-`.env.example`은 설명용이며 자동으로 읽지 않습니다. 모델은 재현성을 위해 `jev-1.13.0`으로 고정했습니다. 실제 서비스 이용 권한과 API 비용은 TypeSafe 계정에 따릅니다.
+`.env.example`은 설명용이며 자동으로 읽지 않습니다. Vercel에서는 `typesafe-ai/jev` 모델 별칭을 사용합니다. 별칭의 실제 모델 버전은 변경될 수 있습니다. `conditions.json`의 `jev.provider`를 `typesafe`로 바꾸면 기존 직접 연결과 `TYPESAFE_API_KEY`, 고정 모델 `jev-1.13.0`을 사용합니다. 공급자 간 자동 전환은 하지 않습니다.
+
+Vercel 공식 모델 페이지 기준 무료 프로모션 종료일은 **2026-09-25**입니다. 정확한 종료 시각과 계정별 적용 여부는 대시보드에서 확인하세요. 무료 종료 후 프로그램이 자동 정지하지는 않습니다. 실행 전 요금과 사용량을 확인하고 `--max-calls`로 실행당 호출 수를 제한하세요. 채팅에 노출한 키는 폐기하고 새 키를 PC에만 입력하세요.
+
+기존 설치를 갱신하려면 `git pull` 후 위 환경변수를 설정합니다. 최초 연결 확인은 `python app.py inspect --strategy trend --jev --max-calls 1`로 실행합니다. 출력의 `jev.status`가 `ok`이면 정상 응답이며, `error`이면 연결 또는 응답 검증에 실패한 것입니다. 이 명령은 매매 주문을 보내지 않습니다.
 
 Jev에는 완료된 최근 20개 캔들, 지표, 전략 설명, 설정한 문장 조건, 모의 포지션 정보만 보냅니다. 미래 캔들·실계좌 정보·Binance 비밀키는 보내지 않습니다.
 
@@ -106,7 +110,7 @@ python app.py replay --strategy trend --start 2026-06-01 --end 2026-09-01 --jev 
 
 `trend`는 추세 눌림목, `breakout`은 거래량 돌파, `range`는 횡보장 반등입니다. 결과는 `runtime/comparison.json`에 저장됩니다. 세 전략을 각각 실행하면 비교할 수 있습니다. 파일이 덮어써지므로 결과를 보관하려면 이름을 바꾸세요.
 
-처음에는 짧은 기간으로 API 연결부터 확인하세요. 최대 호출 수에 도달하면 실행은 실패로 중단되고 완성된 비교 결과를 만들지 않습니다. 이전 결과 파일이 있을 수 있으므로 터미널 성공 여부와 결과 기간을 확인하세요. 동일한 요청은 로컬 캐시를 재사용합니다. 조건이나 상태가 달라지면 캐시 키가 달라집니다. 실패한 응답은 정상 응답으로 캐시하지 않습니다.
+처음에는 짧은 기간으로 API 연결부터 확인하세요. 최대 호출 수에 도달하면 실행은 실패로 중단되고 완성된 비교 결과를 만들지 않습니다. 이전 결과 파일이 있을 수 있으므로 터미널 성공 여부와 결과 기간을 확인하세요. 동일한 요청은 로컬 캐시를 재사용합니다. 연결 주소, 모델, 조건이나 상태가 달라지면 캐시 키가 달라집니다. 실패한 응답은 정상 응답으로 캐시하지 않습니다.
 
 **과거 Jev 재생 결과도 전진 모의투자와 다릅니다.** 현재 모델이 과거 시장 사건을 학습했을 가능성과 API 지연을 다음 봉 체결가에 반영하지 못하는 문제가 있습니다. 따라서 과거 비교만으로 실거래에 전환해서는 안 됩니다. 다음 개발 단계는 앞으로 발생하는 자료로 지속 실행하는 모의체결과 주문 복구 검증입니다.
 
@@ -144,3 +148,6 @@ python -m unittest discover -s tests -v
 - https://docs.typesafe.ai/confidence
 - https://github.com/binance/binance-public-data
 - https://developers.binance.com/docs/derivatives/usds-margined-futures/general-info
+
+- https://vercel.com/docs/ai-gateway/sdks-and-apis/typesafe
+- https://vercel.com/ai-gateway/models/jev

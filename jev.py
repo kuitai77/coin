@@ -10,6 +10,15 @@ import urllib.request
 from pathlib import Path
 
 ENDPOINT = 'https://api.typesafe.ai/v1/systemone'
+GATEWAY_ENDPOINT = 'https://ai-gateway.vercel.sh/typesafe/v1/systemone'
+
+def connection(cfg):
+    provider = cfg['jev'].get('provider', 'typesafe')
+    if provider == 'vercel':
+        return provider, GATEWAY_ENDPOINT, 'AI_GATEWAY_API_KEY', 'typesafe-ai/jev'
+    if provider == 'typesafe':
+        return provider, ENDPOINT, 'TYPESAFE_API_KEY', cfg['jev']['model']
+    raise ValueError('jev.provider must be typesafe or vercel')
 DESCRIPTIONS = {
     'trend': 'EMA trend alignment plus close crossing back over the pullback EMA; short is the exact inverse.',
     'breakout': 'Close breaks prior lookback high/low, volume exceeds its prior average multiplier, and slow EMA agrees.',
@@ -47,6 +56,7 @@ def load_config(path='conditions.json'):
         if not isinstance(value,(int,float)) or not math.isfinite(value) or value<=0:raise ValueError('Invalid target ATR')
     for key in ['min_confidence','minimum_choice_probability']:
         if not 0<=cfg['jev'][key]<=1:raise ValueError(f'Invalid threshold: {key}')
+    connection(cfg)
     return cfg
 
 def hard_checks(snapshot, checks):
@@ -62,7 +72,7 @@ def hard_checks(snapshot, checks):
 
 def make_payload(snapshot,cfg):
     return {
-        'model':cfg['jev']['model'],
+        'model':connection(cfg)[3],
         'state':snapshot,
         'questions':{
             'entry_fit':{
@@ -93,7 +103,7 @@ def validate_answer(raw,key,expected):
 
 def parse(raw,cfg):
     if not isinstance(raw.get('model'),str):raise ValueError('Missing model version')
-    if raw['model']!=cfg['jev']['model']:raise ValueError('Unexpected model version')
+    if raw['model']!=connection(cfg)[3]:raise ValueError('Unexpected model version')
     entry=validate_answer(raw,'entry_fit',{'ALLOW','BLOCK','UNKNOWN'})
     closing=validate_answer(raw,'exit_action',{'CLOSE','HOLD','UNKNOWN'})
     def passes(a,choice):
@@ -104,21 +114,23 @@ class Jev:
     def __init__(self,cfg,cache='runtime/jev-cache',max_calls=2000):
         self.cfg=cfg;self.cache=Path(cache);self.cache.mkdir(parents=True,exist_ok=True)
         self.calls=0;self.max_calls=max_calls
-        self.key=os.environ.get('TYPESAFE_API_KEY')
-        if not self.key:raise ValueError('TYPESAFE_API_KEY is required; set it locally, never paste it in chat.')
+        self.provider,self.endpoint,key_name,_=connection(cfg)
+        self.key=os.environ.get(key_name)
+        if not self.key:raise ValueError(f'{key_name} is required; set it locally, never paste it in chat.')
     def evaluate(self,snapshot):
         payload=make_payload(snapshot,self.cfg)
         body=json.dumps(payload,sort_keys=True,ensure_ascii=False,allow_nan=False).encode()
-        digest=hashlib.sha256(body).hexdigest();path=self.cache/(digest+'.json')
+        digest=hashlib.sha256(self.endpoint.encode()+b'\n'+body).hexdigest();path=self.cache/(digest+'.json')
         if path.exists():return parse(json.loads(path.read_text())['response'],self.cfg)
         if self.calls>=self.max_calls:raise CallBudgetExceeded('Jev call budget exhausted; comparison aborted, not a completed trial.')
         self.calls+=1
-        req=urllib.request.Request(ENDPOINT,data=body,headers={'Authorization':'Bearer '+self.key,'Content-Type':'application/json'},method='POST')
+        req=urllib.request.Request(self.endpoint,data=body,headers={'Authorization':'Bearer '+self.key,'Content-Type':'application/json'},method='POST')
         try:
             # Deliberately no automatic retry: avoid bursts/costs. Next candle can retry.
             with urllib.request.urlopen(req,timeout=15) as response: raw=json.load(response)
             result=parse(raw,self.cfg)
-            path.write_text(json.dumps({'request':payload,'response':raw},ensure_ascii=False),encoding='utf-8')
+            result['provider']=self.provider
+            path.write_text(json.dumps({'provider':self.provider,'request':payload,'response':raw},ensure_ascii=False),encoding='utf-8')
             return result
         except Exception as exc:
             # Failed decisions are not cached as valid evaluations. Preserve fixed stops.

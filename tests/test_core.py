@@ -1,12 +1,19 @@
 import copy
 import unittest
+import json
+import io
+import os
+import tempfile
+from unittest.mock import patch
+from jev import Jev, CallBudgetExceeded
 from pathlib import Path
 import pandas as pd
 from jev import load_config, parse, hard_checks, make_payload
 from research.backtest import features, snapshot, simulate
 ROOT=Path(__file__).resolve().parents[1]
 class CoreTests(unittest.TestCase):
- def setUp(self):self.cfg=load_config(ROOT/'conditions.json')
+ def setUp(self):
+  self.cfg=load_config(ROOT/'conditions.json');self.cfg['jev']['provider']='typesafe'
  def data(self):
   t=pd.date_range('2026-01-01',periods=270,freq='15min',tz='UTC')
   d=pd.DataFrame({'time':t,'open_time':t.astype('int64')//1000000,'open':100.,'high':101.,'low':99.,'close':100.,'volume':10.,'funding':0.})
@@ -63,4 +70,29 @@ class CoreTests(unittest.TestCase):
   cfg=copy.deepcopy(self.cfg);cfg['jev']['entry_conditions']=['사용자 조건 예시']
   req=make_payload(snapshot(self.data(),260,'trend',cfg),cfg)
   self.assertEqual(req['questions']['entry_fit']['instructions']['entry_conditions'],['사용자 조건 예시'])
+ def test_gateway_transport_cache_and_budget(self):
+  self.cfg['jev']['provider']='vercel'
+  raw=self.response();raw['model']='typesafe-ai/jev'
+  with tempfile.TemporaryDirectory() as cache, patch.dict(os.environ,{'AI_GATEWAY_API_KEY':'test-secret'},clear=True), patch('urllib.request.urlopen') as urlopen:
+   urlopen.return_value=io.BytesIO(json.dumps(raw).encode())
+   gate=Jev(self.cfg,cache=cache,max_calls=1)
+   self.assertTrue(gate.evaluate({'public':'data'})['allow_entry'])
+   req=urlopen.call_args.args[0]
+   self.assertEqual(req.full_url,'https://ai-gateway.vercel.sh/typesafe/v1/systemone')
+   self.assertEqual(json.loads(req.data)['model'],'typesafe-ai/jev')
+   self.assertEqual(req.get_header('Authorization'),'Bearer test-secret')
+   self.assertTrue(gate.evaluate({'public':'data'})['allow_entry'])
+   self.assertEqual(urlopen.call_count,1)
+   with self.assertRaises(CallBudgetExceeded):gate.evaluate({'public':'changed'})
+   for f in Path(cache).glob('*'):self.assertNotIn('test-secret',f.read_text())
+ def test_gateway_bad_response_fails_closed(self):
+  self.cfg['jev']['provider']='vercel'
+  with tempfile.TemporaryDirectory() as cache, patch.dict(os.environ,{'AI_GATEWAY_API_KEY':'test-secret'},clear=True), patch('urllib.request.urlopen') as urlopen:
+   urlopen.return_value=io.BytesIO(json.dumps(self.response()).encode())
+   result=Jev(self.cfg,cache=cache).evaluate({})
+   self.assertEqual(result['status'],'error');self.assertFalse(result['allow_entry'])
+ def test_gateway_does_not_fall_back_to_direct_key(self):
+  self.cfg['jev']['provider']='vercel'
+  with tempfile.TemporaryDirectory() as cache, patch.dict(os.environ,{'TYPESAFE_API_KEY':'test'},clear=True):
+   with self.assertRaisesRegex(ValueError,'AI_GATEWAY_API_KEY'):Jev(self.cfg,cache=cache)
 if __name__=='__main__':unittest.main()
