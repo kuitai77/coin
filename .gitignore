@@ -1,0 +1,12 @@
+.env
+.env.*
+!.env.example
+.venv/
+__pycache__/
+*.pyc
+research/data
+research/full_*.json
+research/reference_*.json
+research/evaluation_*.json
+research/results*.json
+runtime/

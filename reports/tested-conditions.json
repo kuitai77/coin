@@ -1,0 +1,47 @@
+{
+  "symbol": "BTCUSDT",
+  "interval": "15m",
+  "initial_equity": 10000,
+  "risk_per_trade": 0.005,
+  "max_notional_equity_ratio": 2.0,
+  "daily_loss_limit": 0.02,
+  "max_drawdown_limit": 0.10,
+  "fee_per_side": 0.0005,
+  "slippage_per_side": 0.0002,
+  "stop_atr": 1.5,
+  "target_atr": {"trend": 3.0, "breakout": 3.0, "range": 1.5},
+  "max_holding_bars": 32,
+  "cooldown_bars": 4,
+  "quantity_step": 0.001,
+  "minimum_notional": 100,
+  "indicators": {
+    "pullback_ema": 20,
+    "trend_ema": 50,
+    "slow_ema": 200,
+    "atr_period": 14,
+    "rsi_period": 14,
+    "breakout_bars": 20,
+    "volume_bars": 20,
+    "volume_multiplier": 1.2,
+    "bollinger_bars": 20,
+    "bollinger_std": 2.0,
+    "range_ema_distance": 0.005,
+    "range_rsi_long": 35,
+    "range_rsi_short": 65
+  },
+  "extra_entry_checks": [],
+  "jev": {
+    "model": "jev-1.13.0",
+    "min_confidence": 0.70,
+    "minimum_choice_probability": 0.80,
+    "entry_conditions": [
+      "Only approve the proposed rule-based side when the supplied completed candles and indicators support that exact strategy.",
+      "Block entry if the latest candle has an unusually large opposing wick or the recent data visibly contradict the proposed direction.",
+      "If any required information is missing, select UNKNOWN. Do not invent news, order-book data, future prices, or a win probability."
+    ],
+    "exit_conditions": [
+      "Close early only when the supplied completed candles clearly invalidate the held position's original strategy.",
+      "Otherwise select HOLD or UNKNOWN. Fixed stop, target, and risk limits are always enforced separately by code."
+    ]
+  }
+}
